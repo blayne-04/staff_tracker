@@ -97,19 +97,15 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
       type: 'input',
       name: 'dpQuery',
       message: 'Enter the new department name',
-      validate: (input) => {
-        if (dpRegex.test(input)){
-          return true;
-        } else {
-          return 'A department name may only include hyphens, letters, numbers <=30 characters'
-        }
+      validate: (depName) => { return dpRegex.test(depName) 
+        ?true : 'A department name may only include hyphens, letters, numbers <=30 characters'
       }
     }
   ]
   inquirer.prompt(dpQuery)
   .then(res => {
     db.query(`INSERT INTO departments (name) VALUES (?)`, [res.dpQuery], (err, data) => {
-      err ? console.error(err) : console.table(data); menuReturn()
+      err ? console.error(err) : viewDepartments(); menuReturn()
     })
   }) .catch(err => {console.error(err)})
 }
