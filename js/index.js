@@ -20,7 +20,7 @@ options = [
     type: 'list',
     name: 'actSel',
     message: 'Select which action you would like to take',
-    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee']
+    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'Exit']
   }
 ]
 function menu(){
@@ -40,7 +40,7 @@ function menu(){
         addDepartment()
         break;
       case 'Add Role':
-      //add role function
+        addRole()
         break;
       case 'Add Employee':
       //add employee function
@@ -48,45 +48,47 @@ function menu(){
       case 'Update Employee':
       //update employee function
         break;
+      case 'Exit': 
+      db.end()
+        console.log('Goodbye!')
+        break;
     }
   }).catch(err => {
     console.log(err)
   })
 }
+
 menu()
-function menuReturn(){
+
+function exit(){
   inquirer.prompt([
     {
-      type: 'confirm',
+      type: 'input',
       name: 'mainMenu',
-      message: 'Type Y to return to the options menu, Type N to exit the program'
+      message: 'Press Enter To Exit The Program'
     }
   ]).then((res) => {
-    if(res.mainMenu){
-      menu()
-    } else{
-      console.log('Goodbye')
-      process.exit()
-    }
+    console.log('\nGoodbye')
+    process.exit()
   })
 }
 
 //db query for department names
 function viewDepartments(){
   db.query(`SELECT name FROM departments`, (err, data) => {
-    err ? console.error(err) : console.table(data); menuReturn()
+    err ? console.error(err) : console.table(data); exit()
   })
 }
 //db query for role information
 function viewRoles(){
   db.query(`SELECT * FROM roles`, (err, data) => {
-    err? console.error(err) : console.table(data); menuReturn()
+    err? console.error(err) : console.table(data); exit()
   })
 }
 
 function viewEmployees(){
   db.query('SELECT * FROM employees', (err, data) => {
-    err? console.error(err) : console.table(data); menuReturn()
+    err? console.error(err) : console.table(data); exit()
   })
 }
 
@@ -105,7 +107,55 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
   inquirer.prompt(dpQuery)
   .then(res => {
     db.query(`INSERT INTO departments (name) VALUES (?)`, [res.dpQuery], (err, data) => {
-      err ? console.error(err) : viewDepartments(); menuReturn()
+      err ? console.error(err) : viewDepartments()
     })
   }) .catch(err => {console.error(err)})
 }
+
+function DepIdFetch(callback){
+  let depList
+  db.query('SELECT id, name FROM departments', (err, data) => {
+    err ? console.error(err) : 
+    depList = data.map(({id, name}) => ({value: id, name: name}));
+    callback(depList);
+  })
+}
+
+function addRole(){
+  const roleRegex = /^[a-zA-Z0-9-]{1,30}$/
+  DepIdFetch((depList) => { 
+    roleQuery = [
+      {
+        type: 'input',
+        name: 'roleQuery',
+        message: 'enter the new role name',
+        validate: (roleName) => { return roleRegex.test(roleName) 
+          ?true : 'A role name may only include hyphens, letters, numbers <=30 characters'
+        } 
+      },
+      {
+        type: 'input',
+        name: 'salary',
+        message: 'Input the roles yearly salary in number only format',
+        validate: (salary) => { return /^[0-9]+$/.test(salary)
+          ?true: 'A salary must be written without special characters or spaces, example: 120000'
+        }
+      },
+      {
+        type: 'list',
+        name: 'depId',
+        message: 'Select a department from the list',
+        choices: depList
+      }
+    ]
+    console.log(depList)
+    inquirer.prompt(roleQuery)
+    .then((res) => {
+      db.query(`INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)`, [res.roleQuery, res.salary, res.depId], (err, data) => {
+        err ? console.error(err) : viewRoles();
+      })
+    })
+  })
+}
+
+function addEmployee(){  }
