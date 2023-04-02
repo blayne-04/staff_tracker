@@ -22,7 +22,7 @@ options = [
     type: 'list',
     name: 'actSel',
     message: 'Select which action you would like to take',
-    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'Clear Tables', 'Seed Data', 'Exit',]
+    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'Clear Database', 'Seed Data', 'Exit',]
   }
 ]
 function menu(){
@@ -48,9 +48,9 @@ function menu(){
         addEmployee()
         break;
       case 'Update Employee':
-      //update employee function
+        updateEmployee()
         break;
-      case 'Clear Tables':
+      case 'Clear Database':
         clearTables()
         break;
       case 'Seed Data':
@@ -192,8 +192,8 @@ async function addRole(){
 }
 
 async function addEmployee(){
-  const empData = await new Promise((resolve, reject) => {
-    db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
+  const managerData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, first_name, last_name FROM employees WHERE manager_id IS NULL', (err, data) => {
       err ? reject('Something happened while fetching data from employees table', err) : 
        resolve(data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`})))
     })
@@ -204,7 +204,6 @@ async function addEmployee(){
       resolve(data.map(({id, title}) => ({value: id, name: title})))
     })
   })
-  console.log(empData, roleData)
     const employeeQuery = [
       {
         type: 'input',
@@ -232,7 +231,7 @@ async function addEmployee(){
         type: 'list',
         name: 'empManager',
         message: 'Select employees manager',
-        choices: empData.concat({value: null, name:'NO MANAGER'})
+        choices: managerData.concat({value: null, name:'NO MANAGER'})
       }
     ]
     inquirer.prompt(employeeQuery)
@@ -241,4 +240,13 @@ async function addEmployee(){
           err ? console.error(err) : viewEmployees();
         })
     })
+}
+
+async function updateEmployee(){
+  const empData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
+      err ? reject('Something happened while fetching data from employees table', err) : 
+       resolve(data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`})))
+    })
+  })
 }
