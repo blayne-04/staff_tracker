@@ -1,6 +1,7 @@
 const inquirer = require(`inquirer`);
 const { default: ListPrompt } = require('inquirer/lib/prompts/list');
 const mysql = require('mysql2')
+const fs = require('fs')
 
 require('dotenv').config()
 const db = mysql.createConnection(
@@ -10,7 +11,8 @@ const db = mysql.createConnection(
       user: process.env.DB_USER,
       // TODO: Add MySQL Password
       password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME
+      database: process.env.DB_NAME,
+      multipleStatements: true
     },
     console.log(`Connected to the database.`)
   );
@@ -20,7 +22,7 @@ options = [
     type: 'list',
     name: 'actSel',
     message: 'Select which action you would like to take',
-    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'menuReturn']
+    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'Clear Tables', 'Seed Data', 'Exit',]
   }
 ]
 function menu(){
@@ -48,16 +50,20 @@ function menu(){
       case 'Update Employee':
       //update employee function
         break;
-      case 'menuReturn': 
-      db.end()
-        console.log('Goodbye!')
+      case 'Clear Tables':
+        clearTables()
         break;
+      case 'Seed Data':
+        seedData()
+        break;
+      case 'Exit': 
+        console.log('Goodbye!')
+        process.exit()
     }
   }).catch(err => {
     console.log(err)
   })
 }
-
 menu()
 
 function menuReturn(){
@@ -116,69 +122,90 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
   }) .catch(err => {console.error(err)})
 }
 
-function dataFetch(depIdFetch, empIdFetch, roleIdFetch){
-    let depList
-    db.query('SELECT id, name FROM departments', (err, data) => {
-      err ? console.log('Something happened while fetching data from departments table') : 
-      depList = data.map(({id, name}) => ({value: id, name: name}));
-      depIdFetch(depList);
-    })
-    let empList
-    db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
-      err ? console.log('Something happened while fetching data from employees table') : 
-      empList = data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`}))
-      empIdFetch(empList)
-    })
-    let roleList
-    db.query('SELECT id, title, salary FROM roles', (err, data) => {
-      err ? console.log('Something happened while fetching data from roles table') : 
-      roleList = data.map(({id, title, salary}) => ({value: id, name: `Title: ${title} Salary: ${salary}`}))
-      roleIdFetch(roleList)
-    })
+function clearTables(){
+  confirmation = [
+    {
+      type: 'confirm',
+      name: 'confirmed',
+      message: 'Are you sure you want to clear the database?',
+      default: false
+    }
+  ]
+  inquirer.prompt(confirmation)
+  .then((confirm) => {
+    if(confirm.confirmed){
+      const schema = fs.readFileSync('db/schema.sql', 'utf-8')
+      db.query(schema, (err, data) => {
+        err ? console.error(err) : console.log('Database Cleared');
+      })
+      db.end()
+    }
+  })
 }
 
+function seedData(){
+  const seeds = fs.readFileSync('db/seeds.sql', 'utf-8')
+  db.query(seeds, (err, data) => {
+    err ? console.error(err) : console.log('Data Seeded')
+  })
+  db.end()
+}
 
-
-function addRole(){
+async function addRole(){
   const roleRegex = /^[a-zA-Z0-9-]{1,30}$/
-  dataFetch((depList) => { 
-    roleQuery = [
-      {
-        type: 'input',
-        name: 'roleQuery',
-        message: 'enter the new role name',
-        validate: (roleName) => { return roleRegex.test(roleName) 
-          ?true : 'A role name may only include hyphens, letters, numbers <=30 characters'
-        } 
-      },
-      {
-        type: 'input',
-        name: 'salary',
-        message: 'Input the roles yearly salary in number only format',
-        validate: (salary) => { return /^[0-9]+$/.test(salary)
-          ?true: 'A salary must be written without special characters or spaces, example: 120000'
-        }
-      },
-      {
-        type: 'list',
-        name: 'depId',
-        message: 'Select a department from the list',
-        choices: depList
-      }
-    ]
-    inquirer.prompt(roleQuery)
-    .then((res) => {
-      db.query(`INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)`, [res.roleQuery, res.salary, res.depId], (err, data) => {
-        err ? console.error(err) : viewRoles();
+  const depData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, name FROM departments', (err, data) => {
+      return err ? reject('Something happened while fetching data from departments table', err): 
+      resolve(data.map(({id, name}) => ({value: id, name: name})))
       })
+  })
+  const roleQuery = [
+    {
+      type: 'input',
+      name: 'roleQuery',
+      message: 'enter the new role name',
+      validate: (roleName) => { return roleRegex.test(roleName) 
+        ?true : 'A role name may only include hyphens, letters, numbers <=30 characters'
+      } 
+    },
+    {
+      type: 'input',
+      name: 'salary',
+      message: 'Input the roles yearly salary in number only format',
+      validate: (salary) => { return /^[0-9]+$/.test(salary)
+        ?true: 'A salary must be written without special characters or spaces, example: 120000'
+      }
+    },
+    {
+      type: 'list',
+      name: 'depId',
+      message: 'Select a department from the list',
+      choices: depData
+    }
+  ]
+  inquirer.prompt(roleQuery)
+  .then((res) => {
+    db.query(`INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)`, [res.roleQuery, res.salary, res.depId], (err, data) => {
+      err ? console.error(err) : viewRoles();
     })
   })
 }
 
-
-function addEmployee(){
-  dataFetch((empList, roleList) => {
-    employeeQuery = [
+async function addEmployee(){
+  const empData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
+      err ? reject('Something happened while fetching data from employees table', err) : 
+       resolve(data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`})))
+    })
+  })
+  const roleData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, title, salary FROM roles', (err, data) => {
+      err ? reject('Something happened while fetching data from roles table', err) : 
+      resolve(data.map(({id, title}) => ({value: id, name: title})))
+    })
+  })
+  console.log(empData, roleData)
+    const employeeQuery = [
       {
         type: 'input',
         name: 'first_name',
@@ -199,20 +226,19 @@ function addEmployee(){
         type: 'list',
         name: 'empRole',
         message: 'Select employee role',
-        choices: roleList
+        choices: roleData
       },
       {
         type: 'list',
         name: 'empManager',
-        message: 'Select employees manager, null if none',
-        choices: [empList, 'null']
+        message: 'Select employees manager',
+        choices: empData.concat({value: null, name:'NO MANAGER'})
       }
     ]
     inquirer.prompt(employeeQuery)
       .then((res) => {
         db.query(`INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (?, ?, ?, ?)`, [res.first_name, res.last_name, res.empRole, res.empManager], (err, data) => {
-          err ? console.error(err) : viewRoles();
+          err ? console.error(err) : viewEmployees();
         })
     })
-  })
 }
