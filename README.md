@@ -23,4 +23,6 @@ N/A
 If you can't find the answer to your questions on my github profile feel free to contact me at befuller2004@gmail.com
 
 ## Tutorial
-[Tutorial Video]()
+[Tutorial Video](https://user-images.githubusercontent.com/107909315/229381445-d67d8b57-739b-4efe-9249-46bb8242a03c.mp4)
+
+
