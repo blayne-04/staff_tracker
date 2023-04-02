@@ -20,7 +20,7 @@ options = [
     type: 'list',
     name: 'actSel',
     message: 'Select which action you would like to take',
-    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'Exit']
+    choices: ['View Departments', 'View Roles', 'View Employees', 'Add Department', 'Add Role', 'Add Employee', 'Update Employee', 'menuReturn']
   }
 ]
 function menu(){
@@ -43,12 +43,12 @@ function menu(){
         addRole()
         break;
       case 'Add Employee':
-      //add employee function
+        addEmployee()
         break;
       case 'Update Employee':
       //update employee function
         break;
-      case 'Exit': 
+      case 'menuReturn': 
       db.end()
         console.log('Goodbye!')
         break;
@@ -60,35 +60,39 @@ function menu(){
 
 menu()
 
-function exit(){
+function menuReturn(){
   inquirer.prompt([
     {
-      type: 'input',
+      type: 'confirm',
       name: 'mainMenu',
-      message: 'Press Enter To Exit The Program'
+      message: 'Enter Y to return to the options menu, Enter N to exit the program'
     }
   ]).then((res) => {
-    console.log('\nGoodbye')
-    process.exit()
+    if(res.mainMenu){
+      menu()
+    } else{
+      console.log('Goodbye')
+      process.exit()
+    }
   })
 }
 
 //db query for department names
 function viewDepartments(){
   db.query(`SELECT name FROM departments`, (err, data) => {
-    err ? console.error(err) : console.table(data); exit()
+    err ? console.error(err) : console.table(data); menuReturn()
   })
 }
 //db query for role information
 function viewRoles(){
   db.query(`SELECT * FROM roles`, (err, data) => {
-    err? console.error(err) : console.table(data); exit()
+    err? console.error(err) : console.table(data); menuReturn()
   })
 }
 
 function viewEmployees(){
   db.query('SELECT * FROM employees', (err, data) => {
-    err? console.error(err) : console.table(data); exit()
+    err? console.error(err) : console.table(data); menuReturn()
   })
 }
 
@@ -112,18 +116,32 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
   }) .catch(err => {console.error(err)})
 }
 
-function DepIdFetch(callback){
-  let depList
-  db.query('SELECT id, name FROM departments', (err, data) => {
-    err ? console.error(err) : 
-    depList = data.map(({id, name}) => ({value: id, name: name}));
-    callback(depList);
-  })
+function dataFetch(depIdFetch, empIdFetch, roleIdFetch){
+    let depList
+    db.query('SELECT id, name FROM departments', (err, data) => {
+      err ? console.log('Something happened while fetching data from departments table') : 
+      depList = data.map(({id, name}) => ({value: id, name: name}));
+      depIdFetch(depList);
+    })
+    let empList
+    db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
+      err ? console.log('Something happened while fetching data from employees table') : 
+      empList = data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`}))
+      empIdFetch(empList)
+    })
+    let roleList
+    db.query('SELECT id, title, salary FROM roles', (err, data) => {
+      err ? console.log('Something happened while fetching data from roles table') : 
+      roleList = data.map(({id, title, salary}) => ({value: id, name: `Title: ${title} Salary: ${salary}`}))
+      roleIdFetch(roleList)
+    })
 }
+
+
 
 function addRole(){
   const roleRegex = /^[a-zA-Z0-9-]{1,30}$/
-  DepIdFetch((depList) => { 
+  dataFetch((depList) => { 
     roleQuery = [
       {
         type: 'input',
@@ -148,7 +166,6 @@ function addRole(){
         choices: depList
       }
     ]
-    console.log(depList)
     inquirer.prompt(roleQuery)
     .then((res) => {
       db.query(`INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)`, [res.roleQuery, res.salary, res.depId], (err, data) => {
@@ -158,4 +175,44 @@ function addRole(){
   })
 }
 
-function addEmployee(){  }
+
+function addEmployee(){
+  dataFetch((empList, roleList) => {
+    employeeQuery = [
+      {
+        type: 'input',
+        name: 'first_name',
+        message: 'Enter the new employees first name',
+        validate: (empName) => { return /^[a-zA-Z]+$/.test(empName)
+          ?true: 'Employee names must be written with only letters and no spaces'
+        }
+      },
+      {
+        type: 'input',
+        name: 'last_name',
+        message: 'Enter the new employees last name',
+        validate: (empName) => { return /^[a-zA-Z]+$/.test(empName)
+          ?true: 'Employee names must be written with only letters and no spaces'
+        }
+      },
+      {
+        type: 'list',
+        name: 'empRole',
+        message: 'Select employee role',
+        choices: roleList
+      },
+      {
+        type: 'list',
+        name: 'empManager',
+        message: 'Select employees manager, null if none',
+        choices: [empList, 'null']
+      }
+    ]
+    inquirer.prompt(employeeQuery)
+      .then((res) => {
+        db.query(`INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (?, ?, ?, ?)`, [res.first_name, res.last_name, res.empRole, res.empManager], (err, data) => {
+          err ? console.error(err) : viewRoles();
+        })
+    })
+  })
+}
