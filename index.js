@@ -66,43 +66,27 @@ function menu(){
 }
 menu()
 
-function menuReturn(){
-  inquirer.prompt([
-    {
-      type: 'confirm',
-      name: 'mainMenu',
-      message: 'Enter Y to return to the options menu, Enter N to exit the program'
-    }
-  ]).then((res) => {
-    if(res.mainMenu){
-      menu()
-    } else{
-      console.log('Goodbye')
-      process.exit()
-    }
-  })
-}
-
 //db query for department names
 function viewDepartments(){
   db.query(`SELECT name FROM departments`, (err, data) => {
-    err ? console.error(err) : console.table(data); menuReturn()
+    err ? console.error(err) : console.table(data); process.exit()
   })
 }
 //db query for role information
 function viewRoles(){
   db.query(`SELECT * FROM roles`, (err, data) => {
-    err? console.error(err) : console.table(data); menuReturn()
+    err? console.error(err) : console.table(data); process.exit()
   })
 }
-
+//db query for employee info
 function viewEmployees(){
   db.query('SELECT * FROM employees', (err, data) => {
-    err? console.error(err) : console.table(data); menuReturn()
+    err? console.error(err) : console.table(data); process.exit()
   })
 }
-
+//prompt for adding a department
 function addDepartment(){
+//regex for testing user input
 const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
   dpQuery = [
     {
@@ -115,6 +99,7 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
     }
   ]
   inquirer.prompt(dpQuery)
+//inserts the value returned by prompt into departments table
   .then(res => {
     db.query(`INSERT INTO departments (name) VALUES (?)`, [res.dpQuery], (err, data) => {
       err ? console.error(err) : viewDepartments()
@@ -123,6 +108,7 @@ const dpRegex = /^[a-zA-Z0-9-]{1,30}$/;
 }
 
 function clearTables(){
+//asks user to confirm that they want to clear all tables
   confirmation = [
     {
       type: 'confirm',
@@ -132,6 +118,7 @@ function clearTables(){
     }
   ]
   inquirer.prompt(confirmation)
+//checks if user has confirmed, if user has confirmed reads schema.sql and runs the contents as a db query, else ends process
   .then((confirm) => {
     if(confirm.confirmed){
       const schema = fs.readFileSync('db/schema.sql', 'utf-8')
@@ -139,11 +126,14 @@ function clearTables(){
         err ? console.error(err) : console.log('Database Cleared');
       })
       db.end()
+    } else{
+      process.exit()
     }
   })
 }
 
 function seedData(){
+//reads seeds.sql and runs contents as a db query
   const seeds = fs.readFileSync('db/seeds.sql', 'utf-8')
   db.query(seeds, (err, data) => {
     err ? console.error(err) : console.log('Data Seeded')
@@ -152,10 +142,13 @@ function seedData(){
 }
 
 async function addRole(){
-  const roleRegex = /^[a-zA-Z0-9-]{1,30}$/
+//regex for verifying role name
+  const roleRegex = /^[a-zA-Z0-9 -]{1,30}$/
+//declares a promise for department data
   const depData = await new Promise((resolve, reject) => {
     db.query('SELECT id, name FROM departments', (err, data) => {
-      return err ? reject('Something happened while fetching data from departments table', err): 
+      return err ? reject('Something happened while fetching data from departments table', err):
+//maps the result to an array to be used with inquirer 
       resolve(data.map(({id, name}) => ({value: id, name: name})))
       })
   })
@@ -184,6 +177,7 @@ async function addRole(){
     }
   ]
   inquirer.prompt(roleQuery)
+//inserts user input into roles table (new title, salary and department id that role belongs to) then displays the updated table
   .then((res) => {
     db.query(`INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)`, [res.roleQuery, res.salary, res.depId], (err, data) => {
       err ? console.error(err) : viewRoles();
@@ -192,6 +186,7 @@ async function addRole(){
 }
 
 async function addEmployee(){
+//declares 2 promises with managerdata and roledata
   const managerData = await new Promise((resolve, reject) => {
     db.query('SELECT id, first_name, last_name FROM employees WHERE manager_id IS NULL', (err, data) => {
       err ? reject('Something happened while fetching data from employees table', err) : 
@@ -231,11 +226,13 @@ async function addEmployee(){
         type: 'list',
         name: 'empManager',
         message: 'Select employees manager',
+//concat the managerData with the null value to declare an employee as a manager
         choices: managerData.concat({value: null, name:'NO MANAGER'})
       }
     ]
     inquirer.prompt(employeeQuery)
       .then((res) => {
+//inserts values into employees table based on user input then displays updated info
         db.query(`INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (?, ?, ?, ?)`, [res.first_name, res.last_name, res.empRole, res.empManager], (err, data) => {
           err ? console.error(err) : viewEmployees();
         })
@@ -243,10 +240,38 @@ async function addEmployee(){
 }
 
 async function updateEmployee(){
+//declares 2 promises (empdata and roledata)
   const empData = await new Promise((resolve, reject) => {
     db.query('SELECT id, first_name, last_name FROM employees', (err, data) => {
       err ? reject('Something happened while fetching data from employees table', err) : 
        resolve(data.map(({id, first_name, last_name}) => ({value: id, name: `${first_name} ${last_name}`})))
+    })
+  })
+  const roleData = await new Promise((resolve, reject) => {
+    db.query('SELECT id, title, salary FROM roles', (err, data) => {
+      err ? reject('Something happened while fetching data from roles table', err) : 
+      resolve(data.map(({id, title}) => ({value: id, name: title})))
+    })
+  })
+  const updateEmp = [
+    {
+      type: 'list',
+      name: 'employee',
+      message: 'Select the employee you would like to update',
+      choices: empData
+    },
+    {
+      type: 'list',
+      name: 'newRole',
+      message: 'Select the employees new role',
+      choices: roleData
+    }
+  ]
+//updates employee role based on employee id, then displays updated info
+  inquirer.prompt(updateEmp).then((res) => {
+    db.query('UPDATE employees SET role_id = ? WHERE id = ?', [res.newRole, res.employee], (err, data) => {
+      err ? console.log('There was an error while updating that employees information') 
+      : console.log('Employee updated successfully'); viewEmployees(); process.exit();
     })
   })
 }
